@@ -1,0 +1,21 @@
+destroy table inet killswitch
+table inet killswitch {
+  chain output {
+    type filter hook output priority filter; policy drop;
+
+    oif lo accept
+
+    # wgcf handshake packets (fwmark 51820 = 0xca6c)
+    meta mark 51820 accept
+
+    # traffic through the WARP tunnel
+    oifname "wgcf" accept
+
+    # tailscale alongside wgcf
+    oifname "tailscale0" accept
+    meta mark and 0xff0000 == 0x80000 accept
+
+    # DHCP so the tunnel endpoint stays reachable
+    udp sport 68 accept
+  }
+}
