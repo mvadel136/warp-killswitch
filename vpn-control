@@ -1,1 +1,1 @@
-%sudo ALL=(ALL) NOPASSWD: /usr/local/bin/vpn
+%wheel ALL=(ALL) NOPASSWD: /usr/local/bin/vpn

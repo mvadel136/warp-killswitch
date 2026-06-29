@@ -17,6 +17,7 @@ install.sh       copies files to the right places
 
 - [wgcf](https://github.com/ViRb3/wgcf) configured and generating `/etc/wireguard/wgcf.conf`
 - `nftables` with `/etc/nftables.conf` including `/etc/nftables.d/*.nft`
+- user in the `wheel` group (Arch) or `sudo` group (Debian/Ubuntu)
 - Tailscale is optional, the rules handle both cases
 
 ## Install

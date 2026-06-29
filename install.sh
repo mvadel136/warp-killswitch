@@ -5,6 +5,7 @@
 cp vpn /usr/local/bin/vpn
 chmod +x /usr/local/bin/vpn
 
+mkdir -p /etc/nftables.d/
 cp killswitch.nft /etc/nftables.d/killswitch.nft
 
 cp vpn-control /etc/sudoers.d/vpn-control
