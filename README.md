@@ -41,7 +41,7 @@ vpn status   show tunnel + kill switch state and public IP
 
 ## How it works
 
-`vpn up` loads `/etc/nftables.d/killswitch.nft` directly. This file does not depend on `/etc/nftables.conf`. It checks that the kill switch table exists before starting the tunnel. If loading the rules fails, or the tunnel fails to start, `vpn up` prints the error and exits without claiming success.
+`vpn up` loads `/etc/nftables.d/killswitch.nft` directly. This file does not depend on `/etc/nftables.conf`. It checks that the kill switch table exists before starting the tunnel. If loading the rules fails, or the tunnel fails to start, `vpn up` prints the error and exits.
 
 The rules block all outgoing traffic by default, for both IPv4 and IPv6. The only traffic allowed out is: loopback, traffic through the `wgcf` interface, the WireGuard and Tailscale packets that carry the tunnels themselves (matched by fwmark), DHCP, and IPv6 neighbor discovery. IPv6 has no ARP, so without that last rule, IPv6 stops working once the neighbor cache expires.
 
@@ -57,4 +57,4 @@ The Tailscale rules use `oifname` instead of `oif` so nftables loads cleanly eve
 
 ## Note on privacy
 
-WARP routes your traffic through Cloudflare. Cloudflare sees your traffic. This hides you from your ISP and public networks, not from Cloudflare. If you need actual privacy, use Mullvad or ProtonVPN.
+WARP routes your traffic through Cloudflare. Cloudflare sees your traffic. This hides you from your ISP and the websites you visit, not from Cloudflare. A VPN provider isn't fundamentally different, it's also a third party that can see your traffic and can be legally compelled to hand over what it has. What actually differs between providers is how much they retain and whether that's been independently audited, not whether it's technically called a VPN. Cloudflare's only published audit covers its 1.1.1.1 DNS resolver, not the WARP tunnel itself.
