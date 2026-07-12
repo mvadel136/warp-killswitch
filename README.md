@@ -44,6 +44,9 @@ vpn restart  restart tunnel without dropping kill switch
 vpn status   show tunnel + kill switch state and public IP
 ```
 
+<img width="702" height="468" alt="p" src="https://github.com/user-attachments/assets/78bccbbd-e19a-455c-8003-c5e3ced95c8a" />
+
+
 ## How it works
 
 `vpn up` loads `/etc/nftables.d/killswitch.nft` directly. This file does not depend on `/etc/nftables.conf`. It checks that the kill switch table exists before starting the tunnel. If loading the rules fails, or the tunnel fails to start, `vpn up` prints the error and exits.
