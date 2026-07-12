@@ -30,6 +30,11 @@ sudo bash install.sh
 
 `install.sh` does the following: copies `vpn` to `/usr/local/bin`, copies `killswitch.nft` to `/etc/nftables.d/`, writes a sudoers rule for your admin group, adds an include line to `/etc/nftables.conf` if it's missing, and enables `nftables.service` and `wg-quick@wgcf.service` so both start on boot.
 
+Tested in practice on Arch. Debian/Ubuntu support (admin group detection,
+a compatibility fix for older nftables) is implemented and researched, not
+yet confirmed on real hardware there. If you run it on Debian or Ubuntu,
+I'd like to know how it goes.
+
 ## Usage
 
 ```
