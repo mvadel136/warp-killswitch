@@ -1,74 +1,83 @@
 #!/usr/bin/env bash
-# vpn — wgcf/WARP control with nftables kill switch
-# usage: vpn up | vpn down | vpn restart | vpn status
+set -euo pipefail
 
 [ "$EUID" -ne 0 ] && exec sudo "$0" "$@"
 
-G=$'\033[0;32m'
-R=$'\033[0;31m'
-Y=$'\033[1;33m'
-B=$'\033[1m'
-N=$'\033[0m'
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    G=$'\033[0;32m'
+    R=$'\033[0;31m'
+    Y=$'\033[1;33m'
+    N=$'\033[0m'
+else
+    G=""
+    R=""
+    Y=""
+    N=""
+fi
 
 cmd_up() {
-    echo ""
-    echo "${B}Starting VPN...${N}"
-    echo "  ▶ Loading kill switch..."
-    nft -f /etc/nftables.conf
-    echo "  ▶ Starting tunnel..."
-    systemctl start wg-quick@wgcf
-    echo "  ${G}✓ VPN is UP — your IP is hidden.${N}"
-    echo "  ${Y}  Internet stops if the tunnel drops.${N}"
-    echo ""
+    echo "Starting VPN..."
+    echo "Loading kill switch..."
+    if ! nft -f /etc/nftables.d/killswitch.nft; then
+        if nft list table inet killswitch &>/dev/null; then
+            echo "${R}Failed to reload kill switch rules.${N}"
+            echo "${Y}An older kill switch is still active, traffic is still blocked, just not refreshed.${N}"
+        else
+            echo "${R}Failed to load nftables rules. VPN not started, no kill switch active.${N}"
+        fi
+        exit 1
+    fi
+    if ! nft list table inet killswitch &>/dev/null; then
+        echo "${R}Kill switch table missing after load. No kill switch active.${N}"
+        echo "${Y}/etc/nftables.d/killswitch.nft did not produce a killswitch table. Re-run install.sh.${N}"
+        exit 1
+    fi
+    echo "Starting tunnel..."
+    if ! systemctl start wg-quick@wgcf; then
+        echo "${R}Tunnel failed to start.${N}"
+        echo "${Y}Kill switch is still active, traffic is blocked, not leaking.${N}"
+        echo "${Y}Check: systemctl status wg-quick@wgcf${N}"
+        exit 1
+    fi
+    echo "${G}VPN is up. Your IP is hidden.${N}"
+    echo "Internet stops if the tunnel drops."
 }
 
 cmd_down() {
-    echo ""
-    echo "${B}Stopping VPN...${N}"
-    echo "  ▶ Stopping tunnel..."
+    echo "Stopping VPN..."
     systemctl stop wg-quick@wgcf 2>/dev/null || true
-    echo "  ▶ Removing kill switch..."
     nft delete table inet killswitch 2>/dev/null || true
-    echo "  ${R}✓ VPN is DOWN — internet uses your real IP.${N}"
-    echo "  ${Y}  Type 'vpn up' to restore.${N}"
-    echo ""
+    echo "${R}VPN is down. Internet uses your real IP.${N}"
 }
 
 cmd_restart() {
-    echo ""
-    echo "${B}Restarting tunnel...${N}"
-    echo "  ▶ Kill switch stays active."
-    systemctl restart wg-quick@wgcf
-    echo "  ${G}✓ Done.${N}"
-    echo ""
+    echo "Restarting tunnel. Kill switch stays active."
+    if ! systemctl restart wg-quick@wgcf; then
+        echo "${R}Restart failed. Kill switch still active, traffic blocked.${N}"
+        echo "${Y}Check: systemctl status wg-quick@wgcf${N}"
+        exit 1
+    fi
+    echo "${G}Done.${N}"
 }
 
 cmd_status() {
-    TUNNEL="DOWN"
-    KILL="INACTIVE"
-    ip link show wgcf &>/dev/null && TUNNEL="UP"
-    nft list table inet killswitch &>/dev/null && KILL="ACTIVE"
+    TUNNEL="down"
+    KILL="inactive"
+    ip link show wgcf &>/dev/null && TUNNEL="up"
+    nft list table inet killswitch &>/dev/null && KILL="active"
 
-    echo ""
-    echo "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "   VPN Status"
-    echo "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    [ "$TUNNEL" = "up" ] \
+        && echo "tunnel (wgcf): ${G}up${N}" \
+        || echo "tunnel (wgcf): ${R}down${N}"
 
-    [ "$TUNNEL" = "UP" ] \
-        && echo "   Tunnel (wgcf)  ${G}UP ✓${N}" \
-        || echo "   Tunnel (wgcf)  ${R}DOWN ✗${N}"
+    [ "$KILL" = "active" ] \
+        && echo "kill switch:   ${G}active${N}" \
+        || echo "kill switch:   ${R}inactive${N}"
 
-    [ "$KILL" = "ACTIVE" ] \
-        && echo "   Kill switch    ${G}ACTIVE ✓${N}" \
-        || echo "   Kill switch    ${R}INACTIVE ✗${N}"
-
-    echo "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "   Public info:"
+    echo "public info:"
     curl -s --max-time 6 https://cloudflare.com/cdn-cgi/trace 2>/dev/null \
-        | grep -E "^(ip|warp|loc)=" | sed 's/^/     /' \
-        || echo "     (no internet)"
-    echo "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
+        | grep -E "^(ip|warp|loc)=" | sed 's/^/  /' \
+        || echo "  (no internet)"
 }
 
 case "${1:-status}" in
@@ -77,9 +86,7 @@ case "${1:-status}" in
     restart) cmd_restart ;;
     status)  cmd_status ;;
     *)
-        echo ""
-        echo "  Usage: vpn up | vpn down | vpn status | vpn restart"
-        echo ""
+        echo "usage: vpn up | vpn down | vpn status | vpn restart"
         exit 1
         ;;
 esac

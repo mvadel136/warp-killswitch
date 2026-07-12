@@ -1,1 +1,1 @@
-%wheel ALL=(ALL) NOPASSWD: /usr/local/bin/vpn
+%wheel ALL=(root) NOPASSWD: /usr/local/bin/vpn
