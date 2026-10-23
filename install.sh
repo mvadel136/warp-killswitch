@@ -69,31 +69,33 @@ if [ -n "$TARGET_USER" ]; then
     fi
 fi
 
-echo "==> checking /etc/nftables.conf (boot persistence only, vpn up loads killswitch.nft directly)"
+echo "==> installing systemd units"
+cp vpn-killswitch.service /etc/systemd/system/vpn-killswitch.service
+cp vpn-resume.service /etc/systemd/system/vpn-resume.service
+mkdir -p /etc/systemd/system/wg-quick@wgcf.service.d/
+cp wgcf-killswitch.conf /etc/systemd/system/wg-quick@wgcf.service.d/killswitch.conf
+# old hook, never ran
+rm -f /etc/systemd/system-sleep/wgcf.sh
+systemctl daemon-reload
+
+echo "==> checking /etc/nftables.conf"
 NFT_CONF=/etc/nftables.conf
-INCLUDE_LINE='include "/etc/nftables.d/*.nft";'
 ACTIVE_RE='^[[:space:]]*include[[:space:]]+"/etc/nftables\.d/\*\.nft"[[:space:]]*;?[[:space:]]*$'
-if [ ! -f "$NFT_CONF" ]; then
-    printf '#!/usr/sbin/nft -f\n\nflush ruleset\n\n%s\n' "$INCLUDE_LINE" > "$NFT_CONF"
-    chmod 644 "$NFT_CONF"
-    echo "  created $NFT_CONF with the include line"
-elif grep -qE "$ACTIVE_RE" "$NFT_CONF"; then
-    echo "  include line already active"
-else
+if [ -f "$NFT_CONF" ] && grep -qE "$ACTIVE_RE" "$NFT_CONF"; then
     BACKUP="$NFT_CONF.bak.$(date +%s)"
     cp "$NFT_CONF" "$BACKUP"
-    printf '\n%s\n' "$INCLUDE_LINE" >> "$NFT_CONF"
-    echo "  no active include line found, added one (backup: $BACKUP)"
-    echo "  any pre-existing commented-out include lines were left as-is"
+    sed -i -E "s|$ACTIVE_RE|# & (disabled by warp-killswitch)|" "$NFT_CONF"
+    echo "  commented out the nftables.d include (backup: $BACKUP)"
+else
+    echo "  no active nftables.d include, nothing to do"
 fi
-
-if ! CHECK_OUT="$(nft -c -f "$NFT_CONF" 2>&1)"; then
-    echo "  $NFT_CONF does not pass nft -c -f, fix it before running vpn up:" >&2
+if [ -f "$NFT_CONF" ] && ! CHECK_OUT="$(nft -c -f "$NFT_CONF" 2>&1)"; then
+    echo "  $NFT_CONF does not pass nft -c -f, fix it:" >&2
     echo "$CHECK_OUT" >&2
 fi
 
 echo "==> enabling services for boot persistence"
-for unit in nftables.service wg-quick@wgcf.service; do
+for unit in vpn-killswitch.service wg-quick@wgcf.service vpn-resume.service; do
     if systemctl enable "$unit" >/dev/null 2>&1; then
         echo "  enabled $unit"
     else
@@ -105,6 +107,7 @@ echo ""
 echo "install complete"
 echo "  vpn script:    /usr/local/bin/vpn"
 echo "  kill switch:   /etc/nftables.d/killswitch.nft"
+echo "  resume:        vpn-resume.service"
 echo "  passwordless:  %${ADMIN_GROUP}"
 echo ""
 echo "run: vpn up"

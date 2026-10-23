@@ -15,6 +15,8 @@ else
     N=""
 fi
 
+BOOT_UNITS="vpn-killswitch.service wg-quick@wgcf.service"
+
 cmd_up() {
     echo "Starting VPN..."
     echo "Loading kill switch..."
@@ -41,13 +43,26 @@ cmd_up() {
     fi
     echo "${G}VPN is up. Your IP is hidden.${N}"
     echo "Internet stops if the tunnel drops."
+    if systemctl enable $BOOT_UNITS &>/dev/null; then
+        echo "VPN will start on boot."
+    else
+        echo "${Y}Could not enable boot start. Re-run install.sh.${N}"
+    fi
 }
 
 cmd_down() {
     echo "Stopping VPN..."
+    systemctl disable $BOOT_UNITS &>/dev/null || true
     systemctl stop wg-quick@wgcf 2>/dev/null || true
     nft delete table inet killswitch 2>/dev/null || true
     echo "${R}VPN is down. Internet uses your real IP.${N}"
+    echo "VPN stays off after reboot."
+}
+
+# run by vpn-resume.service, skipped after vpn down
+cmd_resume() {
+    nft list table inet killswitch &>/dev/null || exit 0
+    systemctl is-active --quiet wg-quick@wgcf || systemctl start wg-quick@wgcf
 }
 
 cmd_restart() {
@@ -74,6 +89,10 @@ cmd_status() {
         && echo "kill switch:   ${G}active${N}" \
         || echo "kill switch:   ${R}inactive${N}"
 
+    systemctl is-enabled --quiet wg-quick@wgcf \
+        && echo "start on boot: ${G}yes${N}" \
+        || echo "start on boot: ${R}no${N}"
+
     echo "public info:"
     curl -s --max-time 6 https://cloudflare.com/cdn-cgi/trace 2>/dev/null \
         | grep -E "^(ip|warp|loc)=" | sed 's/^/  /' \
@@ -85,6 +104,7 @@ case "${1:-status}" in
     down)    cmd_down ;;
     restart) cmd_restart ;;
     status)  cmd_status ;;
+    resume)  cmd_resume ;;
     *)
         echo "usage: vpn up | vpn down | vpn status | vpn restart"
         exit 1

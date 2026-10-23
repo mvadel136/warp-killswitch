@@ -1,0 +1,13 @@
+[Unit]
+Description=VPN kill switch
+Wants=network-pre.target
+Before=network-pre.target wg-quick@wgcf.service
+After=nftables.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/nft -f /etc/nftables.d/killswitch.nft
+
+[Install]
+WantedBy=multi-user.target

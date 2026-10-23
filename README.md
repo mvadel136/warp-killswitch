@@ -7,10 +7,13 @@ The kill switch blocks all outgoing traffic if the tunnel goes down, so you don'
 ## What's inside
 
 ```
-vpn              the control script
-killswitch.nft   nftables kill switch rules
-vpn-control      sudoers reference (passwordless sudo for vpn)
-install.sh       installs everything and wires up boot persistence
+vpn                     the control script
+killswitch.nft          nftables kill switch rules
+vpn-control             sudoers reference (passwordless sudo for vpn)
+vpn-killswitch.service  loads the kill switch at boot
+vpn-resume.service      restarts the tunnel after suspend
+wgcf-killswitch.conf    starts the tunnel after the kill switch
+install.sh              installs everything and wires up boot persistence
 ```
 
 ## Requirements
@@ -28,7 +31,7 @@ cd warp-killswitch
 sudo bash install.sh
 ```
 
-`install.sh` does the following: copies `vpn` to `/usr/local/bin`, copies `killswitch.nft` to `/etc/nftables.d/`, writes a sudoers rule for your admin group, adds an include line to `/etc/nftables.conf` if it's missing, and enables `nftables.service` and `wg-quick@wgcf.service` so both start on boot.
+`install.sh` does the following: copies `vpn` to `/usr/local/bin`, copies `killswitch.nft` to `/etc/nftables.d/`, writes a sudoers rule for your admin group, installs the systemd units, comments out the `/etc/nftables.d/*.nft` include in `/etc/nftables.conf` (with a backup), and enables the units.
 
 Tested in practice on Arch. Debian/Ubuntu support (admin group detection,
 a compatibility fix for older nftables) is implemented and researched, not
@@ -38,8 +41,8 @@ I'd like to know how it goes.
 ## Usage
 
 ```
-vpn up       load kill switch, start tunnel
-vpn down     stop tunnel, remove kill switch
+vpn up       load kill switch, start tunnel, enable on boot
+vpn down     stop tunnel, remove kill switch, disable on boot
 vpn restart  restart tunnel without dropping kill switch
 vpn status   show tunnel + kill switch state and public IP
 ```
@@ -55,7 +58,9 @@ The rules block all outgoing traffic by default, for both IPv4 and IPv6. The onl
 
 DNS and LAN traffic are not exempted on purpose. There is no rule for port 53 or your local subnet. If the tunnel is down, DNS lookups fail instead of leaking to your ISP. Other devices on your LAN are also unreachable while the kill switch is active. This is intentional.
 
-`/etc/nftables.conf` is only used for boot persistence. `nftables.service` reads it at boot, before you run `vpn up` yourself. `vpn up` does not read or write this file.
+At boot the kill switch loads before the network, then the tunnel starts. Boot follows your last `vpn up` or `vpn down`. The kill switch is not loaded from `/etc/nftables.conf`, so `vpn down` can't leave you offline after a reboot.
+
+After suspend, `vpn-resume.service` starts the tunnel if the kill switch is active.
 
 If you also run ufw, firewalld, or another tool that adds its own rules to the `output` hook: in nftables, a `drop` verdict always ends packet processing immediately, but `accept` does not. A more permissive rule in another tool cannot bypass this kill switch. A more restrictive rule in another tool can block tunnel traffic before this ruleset runs, which just means no internet, not a leak.
 
